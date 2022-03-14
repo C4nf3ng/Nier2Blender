@@ -28,7 +28,7 @@ def construct_armature(name, bone_data_array):			# bone_data =[boneIndex, boneNa
 	ob.show_x_ray = False
 	ob.name = name
 	amt = ob.data
-	amt.name = name +'Amt'
+	amt.name = f'{name}Amt'
 	for bone_data in bone_data_array:	
 		bone = amt.edit_bones.new(bone_data[1])
 		bone.head = Vector(bone_data[4]) 
@@ -83,27 +83,28 @@ def construct_mesh(mesh_data):
 	faces = mesh_data[2]
 	has_bone = mesh_data[3]
 	weight_infos = [[[],[]]]							# A real fan can recognize me even I am a 2 dimensional array
-	print("[+] importing %s" % name)
+	print(f"[+] importing {name}")
 	objmesh = bpy.data.meshes.new(name)
-	if not name in bpy.data.objects.keys(): 
-		obj = bpy.data.objects.new(name, objmesh)
-	else:
-		obj = bpy.data.objects[name]	
+	obj = (bpy.data.objects[name] if name in bpy.data.objects.keys() else
+	       bpy.data.objects.new(name, objmesh))
 	obj.location = Vector((0,0,0))
 	bpy.context.scene.objects.link(obj)
 	objmesh.from_pydata(vertices, [], faces)
 	objmesh.update(calc_edges=True)
 	if has_bone:
 		weight_infos = mesh_data[4]
-		group_names = sorted(list(set(["bone%d" % i  for weight_info in weight_infos for i in weight_info[0]])))
+		group_names = sorted(
+		    list({
+		        "bone%d" % i
+		        for weight_info in weight_infos for i in weight_info[0]
+		    }))
 		for group_name in group_names:
 			obj.vertex_groups.new(group_name)
 		for i in range(len(weight_infos)):
 			for index in range(4):
 				group_name = "bone%d"%weight_infos[i][0][index]
-				weight = weight_infos[i][1][index]
 				group = obj.vertex_groups[group_name]
-				if weight:
+				if weight := weight_infos[i][1][index]:
 					group.add([i], weight, "REPLACE")
 	obj.rotation_euler = (math.tan(1),0,0)
 	return obj
@@ -120,25 +121,25 @@ def consturct_materials(texture_dir ,material):
 	material_name = material[0]
 	textures = material[1]
 	uniforms = material[2]
-	print('[+] importing material %s' % material_name)
-	material = bpy.data.materials.new( '%s' % (material_name))
+	print(f'[+] importing material {material_name}')
+	material = bpy.data.materials.new(f'{material_name}')
 	#print("\n".join(["%s:%f" %(key, uniforms[key]) for key in sorted(uniforms.keys())]))
 	for key in uniforms.keys():
 		if key.lower().find("g_glossiness") > -1:
 			material.specular_intensity = uniforms[key]
 	for texturesType in textures.keys():
-		textures_type = texturesType.lower() 
+		textures_type = texturesType.lower()
 		flag = False
 		for type_key in ['albedo', "normal"]:				# TO_DO:, 'mask', 'light', 'env','parallax','irradiance','curvature']:
 			if textures_type.find(type_key) > -1:
 				flag = True
 		if flag:
-			texture_name = "%s_%s"%(textures[texturesType],texturesType)
-			texture_file = "%s/%s.dds" % (texture_dir, textures[texturesType])
+			texture_name = f"{textures[texturesType]}_{texturesType}"
+			texture_file = f"{texture_dir}/{textures[texturesType]}.dds"
 			if os.path.exists(texture_file):
-				if not texture_name in bpy.data.textures.keys():
-					print('[+] importing texture %s' % texture_name)
-					texture = bpy.data.textures.new('%s' % (texture_name), type = 'IMAGE')
+				if texture_name not in bpy.data.textures.keys():
+					print(f'[+] importing texture {texture_name}')
+					texture = bpy.data.textures.new(f'{texture_name}', type = 'IMAGE')
 					texture.image = bpy.data.images.load(texture_file)
 				else:
 					texture = bpy.data.textures[texture_name]
@@ -163,18 +164,18 @@ def consturct_materials(texture_dir ,material):
 					material_textureslot.use_map_warp = True
 				else:
 					material_textureslot.use_map_color_diffuse = True
-				print('[+] adding texture %s to material %s' % (texture_name, material_name))
+				print(f'[+] adding texture {texture_name} to material {material_name}')
 				material_textureslot.texture = texture
 				material_textureslot.texture_coords = 'UV'
 		else:
-			print("[!] not supported texture %s_%s" % (textures[texturesType], texturesType))
+			print(f"[!] not supported texture {textures[texturesType]}_{texturesType}")
 	if not material.texture_slots[0]:
-		print("[!] no textute found for material %s" % material_name)
+		print(f"[!] no textute found for material {material_name}")
 	return material
 
 def add_material_to_mesh(mesh, materials , uvs):
 	for material in materials:
-		print('linking material %s to mesh object %s' % (material.name, mesh.name))
+		print(f'linking material {material.name} to mesh object {mesh.name}')
 		mesh.data.materials.append(material)
 	bpy.context.scene.objects.active = mesh
 	bpy.ops.object.mode_set(mode="EDIT")
@@ -207,10 +208,11 @@ def format_wmb_mesh(wmb):
 			groupedMeshArray = meshGroupInfo.groupedMeshArray
 			mesh_start = meshGroupInfo.meshStart
 			for meshGroupIndex in range(wmb.wmb3_header.meshGroupCount):
-				meshIndexArray = []
-				for groupedMeshIndex in range(len(groupedMeshArray)):
-					if groupedMeshArray[groupedMeshIndex].meshGroupIndex == meshGroupIndex:
-						meshIndexArray.append(mesh_start + groupedMeshIndex)
+				meshIndexArray = [
+				    mesh_start + groupedMeshIndex
+				    for groupedMeshIndex in range(len(groupedMeshArray))
+				    if groupedMeshArray[groupedMeshIndex].meshGroupIndex == meshGroupIndex
+				]
 				meshGroup = wmb.meshGroupArray[meshGroupIndex]
 				for meshArrayIndex in (meshIndexArray):
 					meshVertexGroupIndex = wmb.meshArray[meshArrayIndex].vertexGroupIndex
@@ -238,14 +240,13 @@ def get_wmb_material(wmb, texture_dir):
 			textures = material.textureArray
 			for key in textures.keys():
 				identifier = textures[key]
-				texture_stream = wmb.wta.getTextureByIdentifier(identifier,wmb.wtp_fp)
-				if texture_stream:
+				if texture_stream := wmb.wta.getTextureByIdentifier(identifier,
+				                                                    wmb.wtp_fp):
 					if not os.path.exists("%s\%s.dds" %(texture_dir, identifier)):
 						create_dir(texture_dir)
-						texture_fp = open("%s\%s.dds" %(texture_dir, identifier), "wb")
-						print('[+] dumping %s.dds'% identifier)
-						texture_fp.write(texture_stream)
-						texture_fp.close()
+						with open("%s\%s.dds" %(texture_dir, identifier), "wb") as texture_fp:
+							print(f'[+] dumping {identifier}.dds')
+							texture_fp.write(texture_stream)
 			materials.append([material_name,textures,uniforms])
 	else:
 		print('missing wta')
